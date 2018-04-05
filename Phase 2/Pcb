@@ -1,0 +1,80 @@
+/*
+ * At any state, the Pcb represents a job that is active in the system. Pcb contains Segment tables and 3 Page map tables in the segment. 
+ */
+
+
+
+import java.util.ArrayList;
+
+public class Pcb {
+
+	int jobID;
+	String loadAddress;
+	String intialPC;
+	int traceFlag;
+	int size;
+	int input_size;
+
+  ArrayList<ArrayList> PMT_ProgSegment= new ArrayList<ArrayList>();
+	ArrayList<Integer> diskPageFrames_ProgSegment= new ArrayList<Integer>();
+	ArrayList<ArrayList> PMT_InputSegment= new ArrayList<ArrayList>();
+	ArrayList<Integer> diskPageFrames_InputSegment= new ArrayList<Integer>();
+	ArrayList<ArrayList> PMT_OutputSegment= new ArrayList<ArrayList>();
+	ArrayList<Integer> diskPageFrames_OutputSegment= new ArrayList<Integer>();
+	ArrayList<Integer> memoryFrames=new ArrayList<Integer>();
+	ArrayList<ArrayList> SMT= new ArrayList<ArrayList>();
+	public int last_loaded;
+
+Pcb(int jID,String loadAddr,String initPC,int traceFLg,int size_,int input_size_,int numberOfPages,ArrayList<Integer> progSegment,ArrayList<Integer> inputSegment,ArrayList<Integer> outputSegment )	{
+		jobID=jID;
+		loadAddress=loadAddr;
+		intialPC=initPC;
+		traceFlag=traceFLg;
+		size=size_;
+		input_size=input_size_;
+		diskPageFrames_ProgSegment=new ArrayList<Integer>(progSegment);
+		diskPageFrames_InputSegment=new ArrayList<Integer>(inputSegment);
+		diskPageFrames_OutputSegment=new ArrayList<Integer>(outputSegment);
+		PMT_ProgSegment.add(new ArrayList<Integer>(progSegment));
+		PMT_ProgSegment.add(new ArrayList<Integer>(progSegment));
+		PMT_ProgSegment.add(new ArrayList<Integer>(progSegment));
+		for(int i=0;i<PMT_ProgSegment.get(0).size();i++) {
+			PMT_ProgSegment.get(0).set(i, -1);
+			PMT_ProgSegment.get(1).set(i, -1);              //reference bit
+			PMT_ProgSegment.get(2).set(i, -1);              //dirty bit
+		}
+
+		PMT_InputSegment.add(new ArrayList<Integer>(inputSegment));
+		PMT_InputSegment.add(new ArrayList<Integer>(inputSegment));
+		PMT_InputSegment.add(new ArrayList<Integer>(inputSegment));
+		for(int i=0;i<PMT_InputSegment.get(0).size();i++) {
+			PMT_InputSegment.get(0).set(i, -1);
+			PMT_InputSegment.get(1).set(i, -1);             //refernce bit
+			PMT_InputSegment.get(2).set(i, -1);             //dirty bit 
+		}
+		PMT_OutputSegment.add(new ArrayList<Integer>(outputSegment));
+		PMT_OutputSegment.add(new ArrayList<Integer>(outputSegment));
+		PMT_OutputSegment.add(new ArrayList<Integer>(outputSegment));
+		for(int i=0;i<PMT_OutputSegment.get(0).size();i++) {
+			PMT_OutputSegment.get(0).set(i, -1);
+			PMT_OutputSegment.get(1).set(i, -1);           //reference bit
+			PMT_OutputSegment.get(2).set(i, -1);           //dirty bit
+		}
+
+		SMT.add(PMT_ProgSegment);
+		Integer q;
+		for(int i=0;i<diskPageFrames_ProgSegment.size();i++) {
+			q=(Integer) diskPageFrames_ProgSegment.get(i);
+			//System.out.println(q);
+		}
+
+		for (int i=0;i<numberOfPages;i++) {
+			int frame =Loader.search_free_memory_page_frame();
+			Memory.FMBV[frame]=1;
+			memoryFrames.add(frame);
+			//System.out.println((Integer)memoryFrames.get(i));
+		}
+		Loader.load(this,0,(Integer)diskPageFrames_ProgSegment.get(Cpu.binary_dec(intialPC)/8));
+
+	}
+}
