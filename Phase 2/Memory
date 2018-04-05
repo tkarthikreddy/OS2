@@ -1,0 +1,75 @@
+/*
+ * The Memory module contains a memory of size 256 words. THe loader loads pages into the page frames present in the Memory module. 
+ * Any Page faults or Segment faults will be handled by the Memory module.
+ */
+
+
+import java.math.BigInteger;
+import java.util.ArrayList;
+
+public class Memory {
+
+	static Error_Handler error_code=new Error_Handler();
+	static String[] memory=new String[256];
+	static ArrayList<Pcb> ready_queue = new ArrayList<Pcb>();
+	static int FMBV[]= {1,1,1,1,1,0,1,1,0,1,0,1,1,1,1,1,1,0,1,1,0,1,1,1,1,1,1,1,1,1,1,0}; // the value will be  set to 1 if a page frame is in use
+	public static int index=0;
+
+
+	static String binary_dec(String to_be_converted) { // converting a hex word number to binary
+		String decimal=null;
+		decimal=new BigInteger(to_be_converted, 2).toString(10); // converting the number from base 16 to base 2
+		return decimal;
+	}
+	static String dec_binary(String to_be_converted) { // converting a hex word number to binary
+		String binary=null;
+		binary=new BigInteger(to_be_converted, 10).toString(2); // converting the number from base 16 to base 2
+
+		return binary;
+	}
+
+	public static String Memory(String X,int Y, String Z) {
+		int YEA=Y;//Integer.parseInt(Y);
+		try {	
+			if (X=="Write") {
+				memory[YEA]=Z;
+
+			}
+			else if(X=="Read") {
+				Z=memory[YEA];
+			}
+			else {
+				error_code.handle(201,"Error in Memory Read/Write instruction\n");
+			}
+
+		}catch(ArrayIndexOutOfBoundsException E) {
+			error_code.handle(211,"Invalid reference to Memory address.\n");	
+		}
+		return Z;
+	}
+
+
+	public static void segmentFaultHandler(Pcb pcb,int segment) {
+		Cpu.clock=Cpu.clock+5;
+		Cpu.segmentFault_time=Cpu.segmentFault_time+5;
+		Cpu.pageFault_time=Cpu.pageFault_time+10;
+		if(segment==1) {
+			pcb.SMT.add(1,pcb.PMT_InputSegment);
+			Loader.load(pcb,1,0);
+		}else if(segment==2){
+			pcb.SMT.add(2,pcb.PMT_OutputSegment);
+			Loader.load(pcb,2,0);
+
+		}
+
+	}
+
+
+	public static void pageFaultHandler(Pcb pcb,int nextInstruction_page) {
+
+		Loader.load(pcb,0, nextInstruction_page);
+		Cpu.clock=Cpu.clock+10;
+		Cpu.pageFault_time=Cpu.pageFault_time+10;
+
+	}
+}
