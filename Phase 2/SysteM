@@ -1,0 +1,155 @@
+/*      Name:Talkanti,Karthik
+        CWID:A20082590
+        Course:5323
+        Project:Step I
+        Date:04/03/2018
+        The SysteM module is responsible for reading jobs from files, allocating disk,memory and CPU for processing
+        of the job. The Job file contains program, input and output segments, which can be read by the loader and 
+        loaded into the memory. Once the initial PC, and the memory page frames are loaded, CPU can process one 
+        instruction after another and keep running indefinitely, until a halt is encountered. If a word the CPU 
+        wants to refer to, is not present in the memory, a page fault occurs. If a Segment is not already present,
+        a segment fault occurs, which are handled by the Memory module. If all the memory page frames allocated to 
+        a job are full, a page has to be replaced according to the second chance algorithm. 
+
+**/
+
+import java.io.BufferedWriter;
+import java.io.*;
+import java.io.FileWriter;
+import java.io.IOException;
+import java.io.PrintWriter;
+import java.math.BigInteger;
+import java.util.InputMismatchException;
+import java.util.Scanner;
+
+public class SysteM {
+	static File file=new File("output.txt");
+	static Error_Handler error_code=new Error_Handler();
+	static int job=0;
+	public static String[] readyQueue=new String[1];
+
+
+	public static void main(String[] args) {
+		if(file.exists()) {
+			file.delete();
+		}
+		job++;
+		try{
+			PrintWriter output = new PrintWriter(new BufferedWriter(new FileWriter(file)));
+			output.println("Cumulative job identification number: "+job);
+			output.println();
+			output.close();
+		}catch(IOException e){System.out.println("File Exception");}
+
+
+		File traceFile=new File("traceFile.txt");
+		if(traceFile.exists()) {
+			traceFile.delete();
+		}
+		job+=1;
+		Loader loader = new Loader();
+		Memory M=new Memory();
+		try {
+			loader.inputSpool(args[0]);
+		}catch (IOException e) {
+		}
+
+		Cpu C = new Cpu();
+	}
+	static void outputSpool(Pcb pcb) {
+		try{
+			PrintWriter out= new PrintWriter(new BufferedWriter(new FileWriter(file,true)));
+			out.println("Input-Data Segment  "+pcb.jobID+1+" :");//Input data segment
+			int i=0;
+			while(i<pcb.diskPageFrames_InputSegment.size()) {
+				out.println(Loader.disk[8*pcb.diskPageFrames_InputSegment.get(i)]);
+				i++;
+			}i=0;
+
+			out.println("Output-Data Segment "+pcb.jobID+2+" :");//Output data segment
+
+			while(i<pcb.diskPageFrames_InputSegment.size()) {
+				int address=8*pcb.diskPageFrames_OutputSegment.get(i);
+				for(int j=0;j<Cpu.outputOffset;j++) {
+
+					if(Loader.disk[address+j]!=null) {
+						out.println(Loader.disk[address+j]);
+					}
+				}
+				i++;
+			}
+
+			int k=pcb.diskPageFrames_ProgSegment.size()+pcb.diskPageFrames_OutputSegment.size()+pcb.diskPageFrames_InputSegment.size();
+
+
+			int diskfragments=0;
+			for(int i1=0;i1<8;i1++) {
+				if(Loader.disk[(8*pcb.last_loaded)+i1]!=null) {
+					diskfragments++;
+				}
+			}
+			diskfragments=diskfragments+(pcb.diskPageFrames_InputSegment.size()*8-pcb.input_size)+8-Cpu.outputOffset;
+
+
+
+
+
+			int memoryfragments=0;
+			for(int i1=0;i1<8;i1++) {
+				if(Memory.memory[(8*(Integer)pcb.PMT_ProgSegment.get(0).get(pcb.last_loaded))+i1]!=null) {
+					memoryfragments++;
+				}
+			}
+			memoryfragments=memoryfragments+(8-pcb.input_size)+8-Cpu.outputOffset;
+
+			out.println();
+			out.println("Clock (Hex)                           :"+Integer.toHexString(Cpu.clock));
+			out.println("Run Time (decimal)                    :"+Integer.toString(Cpu.clock)+" vtu");
+			out.println("Execution time (decimal)              :"+Cpu.execution_time+" vtu");
+			out.println("I/O time (decimal)                    :"+Cpu.IO+" vtu");
+			out.println("Page fault handling time (decimal)    :"+Cpu.pageFault_time+" vtu");//page fault handling time 
+			out.println("Segment fault handling time (decimal) :"+Cpu.segmentFault_time+" vtu");//segment fault handling time 
+			out.println("Memory Utilization in words           :"+pcb.size+"/"+256+" or "+pcb.size*100/256+"%" );//memory utilization
+			out.println("Memory Utilization in frames          :"+pcb.memoryFrames.size()+"/"+32+" or "+pcb.memoryFrames.size()*100/32+"%" );//memory utilization
+			out.println("Disk Utilization in words             :"+(pcb.input_size+pcb.size+Cpu.outputOffset)+"/"+2048+" or "+(pcb.input_size+pcb.size+Cpu.outputOffset)*100/+2048+"%");//disk utilization
+			out.println("Disk Utilization in frames            :"+k+"/"+256+" or "+k*100/256+"%");
+			out.println("Memory Fragmentation                  :"+memoryfragments/3);//memory fragmentation
+			out.println("Disk Fragmentation                    :"+diskfragments/3);//disk fragmentation
+			out.flush();    
+			out.close();
+		}
+		catch(IOException e){
+		}
+	}
+
+	static String user_input() {
+		Memory m=new Memory();
+		int value=0;
+		Scanner scanner=new Scanner(System.in);
+		try {
+
+			value=scanner.nextInt();
+		}
+		catch(InputMismatchException I){
+			boolean isHex = Integer.toString(value).matches("[0-9]+");
+			if(!isHex) {
+				error_code.handle(311,"Invalid input.\n");
+			}}
+		scanner.close();
+		String input="";
+		if(value<0)
+			return(Integer.toBinaryString(value).substring(16));
+		else return new BigInteger(Integer.toString(value), 10).toString(2);
+	}
+
+	static void cpu_output(String s) {
+
+		try {
+			PrintWriter out= new PrintWriter(new BufferedWriter(new FileWriter(file,true)));
+			out.flush();
+			out.close();
+		} catch (IOException e) {
+			e.printStackTrace();
+		}
+	}
+}
