@@ -1,0 +1,548 @@
+/*
+ * The Loader routine is responsible for reading a file and storing the contents of it on the disk. Whenever a page fault occurs, the Memory module determines which page has to be loaded.
+ * Consequently, the Loader loads the required pages into the Memory. 
+ */
+
+
+import java.io.BufferedReader;
+import java.io.FileReader;
+import java.io.IOException;
+import java.math.BigInteger;
+import java.util.ArrayList;
+
+public class Loader {
+
+	static int diskIndex = 0; // index used to access the elements of the buffer
+	static String[] buffer= new String[4]; // buffer used to hold the words in binary format.
+	public static String[] file_read=new String[256]; 
+	static String file;
+	public static int jobID;
+	public static String loadAddress;
+	public static String intialPC;
+	public static int size;
+	public static int traceFlag;
+	public static int inputSegmentSize;
+	public static int outputSegmentSize;
+	static Error_Handler error_code=new Error_Handler();
+	public static int numberOfPages;
+	public static int currentPage=0;
+	static String[] disk=new String[2048];
+	public static int[] diskVector=new int[256];
+	public static ArrayList<Integer> diskPages_progSegment;
+	public static ArrayList<Integer> diskPages_inputSegment;
+	public static ArrayList<Integer> diskPages_outputSegment;
+
+	static int loads=0;
+
+	public static void load(Pcb pcb,int segment,int diskIndex) {
+
+
+		int j=0;
+		int replace=0;
+		loads++;
+		while(Memory.memory[8*(pcb.memoryFrames.get(j))]!=null) {
+			j++;
+			if(j==(Integer)pcb.memoryFrames.size()) {
+				j=replace_page(pcb,segment,diskIndex);
+				break;
+			}
+		}
+
+
+		int memoryFrameNumber=(Integer)pcb.memoryFrames.get(j);
+		Memory.index=8*memoryFrameNumber;
+		int diskPageIndex;
+		if(segment==1) {
+			System.out.println();
+			diskPageIndex=8*pcb.diskPageFrames_InputSegment.get(diskIndex);
+		}else if(segment==2) {
+			diskPageIndex=8*pcb.diskPageFrames_OutputSegment.get(diskIndex);
+		}else {
+			diskPageIndex=8*diskIndex;
+		}
+
+		int bufferIndex=0;
+		int counter=0;
+		while(disk[diskPageIndex]!=null&&counter<8) {
+
+			buffer[bufferIndex]=disk[diskPageIndex];
+			diskPageIndex++;
+			bufferIndex++;
+			counter++;
+			if(bufferIndex==4||disk[diskPageIndex]==null) {
+				int i=0;
+				while(i<bufferIndex) {
+					Memory.memory[Memory.index]=buffer[i];
+					Memory.index++;
+					i++;      	
+				}
+				bufferIndex=0;
+			}
+		}
+
+		//Memory.FMBV[memoryFrameNumber]=1;
+		((ArrayList<Integer>) pcb.SMT.get(segment).get(0)).set(diskIndex,memoryFrameNumber);
+		((ArrayList<Integer>) pcb.SMT.get(segment).get(1)).set(diskIndex,0);
+
+		pcb.last_loaded=diskIndex;
+	}
+
+
+
+	public static int replace_page(Pcb pcb,int segment,int diskIndex) {
+
+		if(segment==1) {
+			for(int i=0;i<pcb.PMT_InputSegment.get(1).size();i++) {
+				if((Integer)pcb.PMT_InputSegment.get(1).get(i)==0&&pcb.last_loaded!=i) {
+					if((Integer)pcb.PMT_InputSegment.get(2).get(i)==1) {
+						pcb.PMT_InputSegment.get(0).set(i, -1);        //added
+						write_to_disk(pcb,segment,i);
+					}
+					for(int p=0;p<pcb.PMT_InputSegment.get(1).size();p++) {
+						if((Integer)pcb.PMT_InputSegment.get(1).get(p)!=-1) {
+							pcb.PMT_InputSegment.get(1).set(p,0);
+						}
+						return i;
+					}
+				}
+			}
+			for(int i=0;i<pcb.PMT_ProgSegment.get(1).size();i++) {
+				if((Integer)pcb.PMT_ProgSegment.get(1).get(i)==0&&pcb.last_loaded!=i) {
+					if((Integer)pcb.PMT_ProgSegment.get(2).get(i)==1) {
+						pcb.PMT_InputSegment.get(0).set(i, -1);      //added
+						write_to_disk(pcb,segment,i);
+					}
+					for(int p=0;p<pcb.PMT_ProgSegment.get(1).size();p++) {
+						if((Integer)pcb.PMT_ProgSegment.get(1).get(p)!=-1) {
+							pcb.PMT_ProgSegment.get(1).set(p,0);
+						}   		}
+					return i;
+				}
+			}
+		}else if(segment==2) {
+			for(int i=0;i<pcb.PMT_OutputSegment.get(1).size();i++) {
+				if((Integer)pcb.PMT_OutputSegment.get(1).get(i)==0&&pcb.last_loaded!=i) {
+					if((Integer)pcb.PMT_OutputSegment.get(2).get(i)==1) {
+						pcb.PMT_OutputSegment.get(0).set(i, -1);   //added
+						write_to_disk(pcb,segment,i);
+					}
+					for(int p=0;p<pcb.PMT_OutputSegment.get(1).size();p++) {
+						if((Integer)pcb.PMT_OutputSegment.get(1).get(p)!=-1) {
+							pcb.PMT_OutputSegment.get(1).set(p,0);
+						}
+						return i;
+					}
+				}
+			}
+			for(int i=0;i<pcb.PMT_ProgSegment.get(1).size();i++) {
+				if((Integer)pcb.PMT_ProgSegment.get(1).get(i)==0&&pcb.last_loaded!=i) {
+					if((Integer)pcb.PMT_ProgSegment.get(2).get(i)==1) {
+						pcb.PMT_ProgSegment.get(0).set(i, -1);    //added
+						write_to_disk(pcb,segment,i);
+					}
+					for(int p=0;p<pcb.PMT_ProgSegment.get(1).size();p++) {
+						if((Integer)pcb.PMT_ProgSegment.get(1).get(p)!=-1) {
+							pcb.PMT_ProgSegment.get(1).set(p,0);
+						}  
+						return i;
+					}
+				}	    
+			}
+		}else {
+			for(int i=0;i<pcb.PMT_ProgSegment.get(1).size();i++) {
+				if((Integer)pcb.PMT_ProgSegment.get(1).get(i)==0&&pcb.last_loaded!=i) {
+					if((Integer)pcb.PMT_ProgSegment.get(2).get(i)==1) {
+						pcb.PMT_ProgSegment.get(0).set(i, -1);        //added
+						write_to_disk(pcb,segment,i);
+					}
+					for(int p=0;p<pcb.PMT_ProgSegment.get(1).size();p++) {
+						if((Integer)pcb.PMT_ProgSegment.get(1).get(p)!=-1) {
+							pcb.PMT_ProgSegment.get(1).set(p,0);
+						}
+					}
+					return i;
+				}
+			}
+		}
+		return -1;
+	}
+
+
+	public static void write_to_disk(Pcb pcb,int segment,int diskIndex) {
+
+		int disk_address=0;
+		int memory_address=0;
+		if(segment==0) {
+			disk_address=8*pcb.diskPageFrames_ProgSegment.get(diskIndex);
+			memory_address=(Integer)pcb.PMT_ProgSegment.get(0).get(diskIndex);
+		}else if(segment==1) {
+			disk_address=8*pcb.diskPageFrames_InputSegment.get(diskIndex);
+			memory_address=(Integer)pcb.PMT_InputSegment.get(0).get(diskIndex);
+		}else if(segment==2) {
+			disk_address=8*pcb.diskPageFrames_OutputSegment.get(diskIndex);
+			memory_address=8*(Integer)pcb.PMT_OutputSegment.get(0).get(diskIndex);
+		}
+
+		int bufferIndex=0;
+		int counter=0;
+		while(Memory.memory[memory_address]!=null&&counter<8) {
+
+			buffer[bufferIndex]=Memory.memory[memory_address];
+			memory_address++;
+			bufferIndex++;
+			if(bufferIndex==4||Memory.memory[memory_address]==null) {
+				int i=0;
+				while(i<bufferIndex) {
+					disk[disk_address]=buffer[i];
+					disk_address++;
+					i++;      	
+				}
+				bufferIndex=0;
+			}
+		}
+
+	}
+
+
+
+
+	public  void inputSpool(String args) throws IOException {
+		boolean isHex;
+		for (int i=0;i<256;i++) {
+			diskVector[i]=0;
+		}
+
+
+		file = args; // file name
+
+		String line_read=null; //the line that is read from the file
+		String line_read_binary=null; // holds the binary equivalent of the line that is read from the file
+		FileReader fileReader = new FileReader(file); // creating a file reader to use with a BufferedReader
+		BufferedReader bufferedReader = new BufferedReader(fileReader); //assigning the file to the BufferedReader
+
+		if((line_read = bufferedReader.readLine()) != null) { // reading a line in the file
+
+
+			String [] jobLine=line_read.split("\\s+");
+
+			//reading the job line, i.e, the first line of the file
+
+			if(jobLine.length!=3) {
+				error_code.handle(101,"Not the correct number of fields in the job line\n");
+			}
+			else {
+
+				if(jobLine[0].equals("**JOB")) { 	
+
+				}
+				else {
+					error_code.handle(190,"Missing **JOB.\n");
+				}
+				if(jobLine[1].length()!=2||jobLine[2].length()!=2) {
+					error_code.handle(191,"invalid size of input/output data segment.\n");
+				}else {
+					isHex = jobLine[1].matches("[0-9A-F]+");
+					if(!isHex) {
+						error_code.handle(192,"Invalid input segment format.\n");
+					}else {
+						inputSegmentSize=hex_dec(jobLine[1]);
+					}
+
+					isHex = jobLine[2].matches("[0-9A-F]+");
+					if(!isHex) {
+						error_code.handle(193,"Invalid output segment format.\n");
+					}
+					else {
+						outputSegmentSize=hex_dec(jobLine[2]);
+					}
+				}
+			}
+		}
+		//finished reading the job line, i.e, the first line of the file
+
+
+		//reading the fields for loading job , i.e, the second line of the file
+
+		if((line_read = bufferedReader.readLine()) != null) { // reading a line in the file
+
+			String [] firstLine=line_read.split("\\s+");
+
+			if(firstLine.length!=5) {
+				error_code.handle(101,"Not the correct number of fields in the first line\n");
+			}
+			else {
+
+				if(firstLine[0].length()==2) {
+					jobID=hex_dec(firstLine[0]);
+				}
+				else {
+					error_code.handle(111,"Job ID format is incorrect.\n");
+				}
+				if(firstLine[1].length()==2) {
+					loadAddress=hex_binary(firstLine[1]);
+				}
+				else {
+					error_code.handle(121,"Error in the location where the program should be stored.\n");
+				}
+				if(firstLine[2].length()==2) {
+					intialPC=hex_binary(firstLine[2]);
+
+
+				}
+				else {
+					error_code.handle(131,"Error in the location of first instruction. \n");
+				}
+				if(firstLine[3].length()==2) {
+					size=Integer.parseInt(new BigInteger(firstLine[3],16).toString(10));
+				}
+				else {
+					error_code.handle(141,"Error in the length of the job.\n");
+				}
+				if(firstLine[4].length()==1) {
+					traceFlag=Integer.parseInt(firstLine[4].toString());
+					if(traceFlag!=1&&traceFlag!=0)
+						error_code.handle(521,"Incorrect Trace flag.\n");
+				}
+				else {
+					error_code.handle(501,"Error in the trace flag. \n");
+				}
+
+
+				//finished reading the fields for loading job , i.e, the second line of the file
+
+				int required_disk_pages=(int) (Math.ceil(size/8)+Math.ceil(inputSegmentSize/8)+Math.ceil(outputSegmentSize/8));
+
+
+				int number_of_lines=(int) (Math.ceil(size/4)+Math.ceil(inputSegmentSize/4)+Math.ceil(outputSegmentSize/4));
+
+				int input_line_number=number_of_lines+1;
+				int number_of_input_lines=inputSegmentSize/4;
+				int last_line_number=input_line_number+number_of_input_lines+1;
+				int line_number=0;
+				int len_bin;
+				int index;
+				String next_line;			
+
+				if(required_disk_pages<count_free_disk_page_frames()) {
+
+					diskPages_progSegment=new  ArrayList<Integer>();
+					//int[] diskPages_InputSegment=new int[(int)Math.ceil(inputSegmentSize/8)];
+					//int[] diskPages_OutputSegment=new int[(int)Math.ceil(outputSegmentSize/8)];
+
+					diskIndex=8*search_free_disk_page_frame();
+
+
+					// reading the job data
+					while((line_read = bufferedReader.readLine()) != null&&line_number<input_line_number-1) {
+
+						if(line_read.length()!=16) {
+							if((next_line=bufferedReader.readLine()) != null)
+								error_code.handle(511,"Insufficient number of instructions in line "+ (line_number+1) +" of the job");
+						}
+						String binary_code="";
+						try {
+							binary_code=hex_binary(line_read);
+						}
+						catch(NumberFormatException E) {
+							isHex = binary_code.matches("[0-9A-F]+");
+							if(!isHex) {
+								error_code.handle(191,"Job "+jobID+" contains data which is not in Hex format in line "+ (line_number+1)+ "\n");
+							}
+						}
+
+						len_bin=binary_code.length();
+						index=0;
+
+						while(index<len_bin) {
+
+							disk[diskIndex]=binary_code.substring(index, index+16);
+							index=index+16;
+							diskIndex++;  
+							if(diskIndex%8==0) {
+								diskVector[diskIndex/8-1]=1;
+								diskPages_progSegment.add(diskIndex/8-1);
+								diskIndex=8*search_free_disk_page_frame();
+
+							}
+						}
+
+						line_number++;  
+					}
+
+					while((diskIndex)%8!=0){
+
+						diskIndex++;
+						if(diskIndex%8==0) {
+							diskVector[diskIndex/8-1]=1;
+							diskPages_progSegment.add(diskIndex/8-1);
+
+						}
+
+					}
+					// finished reading the job data
+
+
+
+					//reading input segment
+					int input_segment=0;
+					int input_segment_words=0;
+					diskPages_inputSegment=new  ArrayList<Integer>();
+					diskIndex=8*search_free_disk_page_frame();
+					do{
+						if(line_read.equals("**INPUT")) {
+							input_segment++;
+							line_number++;
+							if(input_segment==2) {
+								error_code.handle(155,"more than one **INPUT");
+							}
+						}
+
+						else {
+
+
+							if(input_segment==1) {
+								if(line_read.length()%4!=0) {
+									error_code.handle(512,"Insufficient number of instructions in input segment line "+ (line_number+1) +" of the job");
+								}
+								else{
+									input_segment_words+=line_read.length()/4;
+									line_number++;
+
+									String binary_code="";
+									try {
+										binary_code=hex_binary(line_read);
+									}
+									catch(NumberFormatException E) {
+										isHex = binary_code.matches("[0-9A-F]+");
+										if(!isHex) {
+											error_code.handle(191,"Job "+jobID+" contains data which is not in Hex format  in the line "+ (line_number+1)+ "\n");
+										}
+									}
+									//diskIndex=8*search_free_disk_page_frame();
+									len_bin=binary_code.length();
+									index=0;		    	
+									while(index<len_bin) {
+										disk[diskIndex]=binary_code.substring(index, index+16);
+										index=index+16;
+										diskIndex++;  
+										if(diskIndex%8==0) {
+											diskVector[diskIndex/8-1]=1;
+											diskPages_inputSegment.add(diskIndex/8-1);
+											diskIndex=8*search_free_disk_page_frame();
+										}
+									}
+									line_number++;					    		
+								}
+
+								if(input_segment_words>=inputSegmentSize) {
+									break;
+								}
+							}
+						}
+
+						if(input_segment<1) {
+							error_code.handle(159,"Missing **INPUT");
+						}
+					}while((line_read = bufferedReader.readLine()) != null&&line_number<last_line_number);
+
+					while((diskIndex)%8!=0){
+
+						diskIndex++;
+						if(diskIndex%8==0) {
+							diskVector[diskIndex/8-1]=1;
+							diskPages_inputSegment.add(diskIndex/8-1);
+
+						}
+					}
+					if(input_segment_words!=inputSegmentSize) {
+						error_code.handle(190,"number of words in input segment does not match with the size mentioned in the file.");
+					}
+
+					// finished reading the input segment
+
+
+					//allocating space on disk for output segment
+					diskPages_outputSegment=new  ArrayList<Integer>();
+					int c=0;
+					while(c<(int)Math.ceil(outputSegmentSize)) {
+						int a=search_free_disk_page_frame();
+						diskVector[a]=1;
+						diskPages_outputSegment.add(a);
+						c++;
+					}
+
+
+					//Check for **FIN
+					do{
+
+						if(!bufferedReader.readLine().equals("**FIN")) {
+							error_code.handle(173,"missing **FIN");
+						}
+						else {
+							//break;
+						}
+					}while((line_read = bufferedReader.readLine()) != null);
+
+					//finished reading the file
+
+				}
+			}
+
+
+			//creating a PCB
+			numberOfPages=Math.min(6,2+size/8);
+			Memory.ready_queue.add(new Pcb(jobID,loadAddress,intialPC,traceFlag,size,inputSegmentSize,numberOfPages,diskPages_progSegment,diskPages_inputSegment,diskPages_outputSegment));
+		}
+
+
+	}	
+
+
+	static int search_free_disk_page_frame() {
+		int i=0;
+		while(diskVector[i]!=0) {
+			i++;
+		}
+
+		return i;
+	}
+
+
+	static int search_free_memory_page_frame() {
+		int i=0;
+		while(Memory.FMBV[i]!=0&&i<32) {
+			i++;
+			if(i==32) {
+				return-1;
+			}	
+		}
+		return i;
+	}
+
+
+	static int count_free_disk_page_frames() {
+		int count=0;
+		for(int i=0;i<256;i++) {
+			if(diskVector[i]==0) {
+				count++;
+			}
+		}
+
+		return count;
+	}
+
+
+	static String hex_binary(String to_be_converted) { // converting a hex word number to binary
+		String binary=null;
+		binary=new BigInteger(to_be_converted, 16).toString(2); // converting the number from base 16 to base 2
+		//add err
+		while(binary.length()<to_be_converted.length()*4)
+			binary="0"+binary;
+		return binary;
+	}
+
+	static int hex_dec(String to_be_converted) {
+		int decimal=Integer.parseInt(to_be_converted, 16);
+		return decimal;
+	}
+} 
