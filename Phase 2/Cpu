@@ -1,0 +1,591 @@
+/*Cpu routine is responsible for executing the instructions in the memory. If a memory word is not available and needs to be accessed by the Cpu,
+  a page fault occurs, which is handled by Memory module.
+ */
+
+
+import java.io.BufferedWriter;
+import java.io.File;
+import java.io.FileWriter;
+import java.io.IOException;
+import java.io.PrintWriter;
+import java.math.BigInteger;
+import java.util.Scanner;
+
+public class Cpu {  
+	public static String[] S= {"00000","00000","00000","00000","00000","00000","00000"};
+	public static int clock=0;
+	public static int execution_time=0;
+	public static int IO=0;
+	public static int pageFault_time=0;
+	public static int segmentFault_time=0;
+	public static int Instruction_type=-1;
+	private static String PC;
+	private static String IR;
+	static int outputOffset=0;
+	static int inputOffset=0;
+	private String BR="0";
+	static int Tos=0;
+	char index;
+	static String EA = "N/A";
+	static String Z = null;
+	int clock2=0;
+
+	public Cpu() // X is the Program counter and Y is the trace switch. When Trace switch is 1, the details are written to a trace file
+	{
+
+		PC=Memory.ready_queue.get(0).intialPC;
+		IR=PC;		
+		int seg=0;
+		int y=Memory.ready_queue.get(0).traceFlag;
+
+
+		if(y==1) {
+
+			try{
+				File file=new File("./trace_"+SysteM.file);
+				if ( file.exists())  {
+
+					file.delete();
+				}
+
+				PrintWriter out2 = new PrintWriter(new BufferedWriter(new FileWriter("./trace_"+SysteM.file,true)));
+				out2.printf("%3s","PC");
+				out2.printf("%8s","BR");
+				out2.printf("%13s","Instruction");
+				out2.printf("%12s","TOS(before)");
+				out2.printf("%15s","S[TOS](before)");
+				out2.printf("%11s","EA(before)");
+				out2.printf("%23s","Contents of EA(before)");
+				out2.printf("%11s","TOS(after)");
+				out2.printf("%14s","S[TOS](after)");
+				out2.printf("%10s","EA(after)");
+				out2.printf("%22s","Contents of EA(after)");
+				out2.println();
+				out2.printf("%2s","(hex)");
+				out2.printf("%8s","(hex)");
+				out2.printf("%8s","(hex)");
+				out2.printf("%12s","(hex)");
+				out2.printf("%13s","(hex)");
+				out2.printf("%15s","(hex)");
+				out2.printf("%15s","(hex)");
+				out2.printf("%18s","(hex)");
+				out2.printf("%12s","(hex)");
+				out2.printf("%13s","(hex)");
+				out2.printf("%14s","(hex)");
+				out2.println();
+				out2.close();
+			}
+			catch(IOException e){
+				e.printStackTrace();
+			}
+
+
+		}
+
+		boolean loop=true;
+		while(loop) {
+			IR=PC;
+
+			PC=increment(PC);
+
+			int a=binary_dec(IR);
+			String instruction=Memory.memory[(8*(Integer)Memory.ready_queue.get(0).PMT_ProgSegment.get(0).get(a/8))+a%8];
+			Memory.ready_queue.get(0).PMT_ProgSegment.get(1).set(a/8, 1);
+			char t=instruction.charAt(0); //read the instruction type of the instruction. 
+
+
+			if(t=='0') {
+
+				t=instruction.charAt(8);
+
+				if(t=='0') {
+					Instruction_type=0;
+				}
+				else {
+
+				}
+			}
+			else if(t=='1') {
+				Instruction_type=1;
+			}
+			else {	
+			}
+			String[] Op={"00000","00000"};
+
+			if(Instruction_type==0) {
+				Op[0]=instruction.substring(3,8);
+				Op[1]=instruction.substring(11,16);
+			}
+			else if(Instruction_type==1) {
+
+				Op[0]=instruction.substring(1,6);Op[1]="";
+				String DAddr=instruction.substring(9,16);
+				index=instruction.charAt(6);
+
+				if(index=='1') {
+					EA=dec_binary(binary_dec(DAddr)+binary_dec(S[Tos]));
+
+				}
+				else if (index=='0') {
+					EA=DAddr;	
+
+				}
+				else {
+				}
+			}
+
+			int i=0;
+			int length1=Op.length;
+			int Operand=0;
+			while(i<2) {
+
+				if(Op[i]=="")break;
+				else {
+					int decrement_Tos_By=0;		
+					if(Instruction_type==0) {
+						decrement_Tos_By=1;
+					}else if(Instruction_type==1) {
+					}
+
+
+					int   OpNumber=binary_dec(Op[i]);
+					if(y==1) {
+						try{
+							PrintWriter out = new PrintWriter(new BufferedWriter(new FileWriter("./trace_"+SysteM.file,true)));
+							out.printf("%4s",binary_hex(IR));
+							out.printf("%8s",binary_hex(BR));
+							out.printf("%8s",binary_hex(instruction));
+							out.printf("%11s",decimal_hex(Tos));
+							out.printf("%14s",binary_hex(S[Tos]));
+
+							if(EA.equals("N/A"))
+							{
+								out.printf("%14s","NA");
+								out.printf("%16s","NA");
+
+							}else {
+								out.printf("%14s",binary_hex(EA));
+								if((Integer)Memory.ready_queue.get(0).PMT_ProgSegment.get(0).get(binary_dec(EA)/8)==-1) {
+									out.printf("%16s","NA");
+
+								}
+								else {
+
+									out.printf("%16s",binary_hex(Memory.memory[(8*(Integer)Memory.ready_queue.get(0).PMT_ProgSegment.get(0).get(binary_dec(EA)/8))+(binary_dec(EA)%8)]));
+								}
+							}out.close();
+						}
+						catch(IOException e) {
+						}
+					}
+
+					if(Instruction_type==0) {
+						if(OpNumber==19||OpNumber==20) {clock=clock+16;IO+=15;}
+						else if(OpNumber==0) {clock=clock+0;execution_time+=0;
+						}
+						else {clock++;execution_time++;
+						}
+					} 
+					if(Instruction_type==1) {
+						if(OpNumber==19||OpNumber==20) {clock=clock+19;IO+=15;}
+						else if(OpNumber==0) {clock=clock+0;execution_time+=0;
+						}
+						else {clock+=4;execution_time+=4;
+						}
+					}
+
+					switch(OpNumber) {
+
+					case 0:                        break;                                                 			     //NOP - No Operation
+					case 1:                        Operand=getOperand();
+					S[Tos-decrement_Tos_By]=dec_binary(binary_dec(S[Tos])|Operand);       //OR
+					Tos=Tos-decrement_Tos_By;
+					break;
+
+					case 2:                        Operand=getOperand();
+					S[Tos-decrement_Tos_By]=dec_binary(binary_dec(S[Tos])&Operand);       //And
+
+					break;
+
+					case 3:                        if(Instruction_type==0) {
+						clock++;
+						int k=(~binary_dec(S[Tos]));		    	 //String k=dec_binary(~binary_dec(S[Tos]));
+						S[Tos]=dec_binary(k);              //Not
+					}
+					break;
+
+					case 4:                        Operand=getOperand();
+					S[Tos-decrement_Tos_By]=dec_binary(binary_dec(S[Tos])^Operand);       //XOR
+					Tos=Tos-decrement_Tos_By;          
+					break;
+
+					case 5:                        Operand=getOperand();
+					S[Tos-decrement_Tos_By]=dec_binary(binary_dec(S[Tos])+Operand);       //Add
+					Tos=Tos-decrement_Tos_By;          
+					break;
+
+					case 6:                        Operand=getOperand();
+					if(Instruction_type==0) {
+						S[Tos-decrement_Tos_By]=dec_binary(Operand-binary_dec(S[Tos]));       //Sub
+						Tos=Tos-decrement_Tos_By;          
+						break;}
+					else if(Instruction_type==1){
+						S[Tos-decrement_Tos_By]=dec_binary(binary_dec(S[Tos])-Operand);       //Sub
+						Tos=Tos-decrement_Tos_By;          
+						break;
+					}
+
+					case 7:                        Operand=getOperand();
+					S[Tos-decrement_Tos_By]=dec_binary(binary_dec(S[Tos])*Operand);       //Mul
+					Tos=Tos-decrement_Tos_By;          
+					break;
+
+					case 8:                        Operand=getOperand();
+					if(Instruction_type==0) {
+						S[Tos-decrement_Tos_By]=dec_binary(Operand%binary_dec(S[Tos]));       //Mod
+						Tos=Tos-decrement_Tos_By;          
+						break;
+					}
+					else if(Instruction_type==1){
+						S[Tos-decrement_Tos_By]=dec_binary(binary_dec(S[Tos])%Operand);       //Div
+						Tos=Tos-decrement_Tos_By;          
+						break;	   
+					}
+
+					case 9:                        Operand=getOperand();
+					if(Instruction_type==0) {
+						S[Tos-decrement_Tos_By]=dec_binary(Operand%binary_dec(S[Tos]));       //Mod
+						Tos=Tos-decrement_Tos_By;          
+						break;
+					}
+					else if(Instruction_type==1){
+						S[Tos-decrement_Tos_By]=dec_binary(binary_dec(S[Tos])%Operand);       //Mod
+						Tos=Tos-decrement_Tos_By;          
+						break;	   
+					}
+
+					case 10:                       if(Instruction_type==0) {
+						S[Tos]=dec_binary(binary_dec(S[Tos])<<1);                            //SL   
+					}
+					break;
+
+					case 11:                       if(Instruction_type==0) {
+						S[Tos]=dec_binary(binary_dec(S[Tos])>>1);                           //SR
+					}
+					break;
+
+					case 12:                       Operand=getOperand();
+					if(Instruction_type==0) {
+
+						S[Tos+1]=bool_binary(Operand>binary_dec(S[Tos]));                     //CPG
+						Tos=Tos+1;          
+						break;
+					}
+					else if(Instruction_type==1){
+						int r=read_from_stack(S[Tos]);
+						S[Tos+1]=bool_binary(r>Operand);                     //CPG       
+						Tos=Tos+1;          
+						break;
+					}
+
+					case 13:                       Operand=getOperand();
+					if(Instruction_type==0) {
+						S[Tos+1]=bool_binary(Operand<binary_dec(S[Tos]));                            //CPL
+						Tos=Tos+1;          
+						break;
+					}
+					else if(Instruction_type==1){
+						S[Tos+1]=bool_binary(binary_dec(S[Tos])<Operand);                            //CPL
+						Tos=Tos+1;          
+						break;
+					}
+
+					case 14:                       Operand=getOperand();
+					if(Instruction_type==0) {
+						S[Tos+1]=bool_binary(Operand==binary_dec(S[Tos]));                            //CPE
+						Tos=Tos+1;          
+						break;
+					}
+					else if(Instruction_type==1){
+						S[Tos+1]=bool_binary(binary_dec(S[Tos])==Operand);                            //CPE
+						Tos=Tos+1;          
+						break;
+					}
+
+					case 15:                       if(Instruction_type==1) {
+						PC=EA;      
+					}    	 
+					break;
+
+					case 16:                       if(Instruction_type==1) {
+						//String sa=S[Tos];String sb="1";
+						if(S[Tos].equals("1")) {
+							PC=EA;
+						}
+						Tos=Tos-1;
+					}
+					break;
+
+					case 17:                       if(Instruction_type==1) {
+						if(S[Tos]=="0") {
+							PC=EA;
+						}
+						Tos=Tos-1;
+					}
+					break;
+
+					case 18:                       if(Instruction_type==1) {
+						Tos=Tos+1;
+						S[Tos]=PC;
+						PC=EA;      
+					}
+					break;
+
+					case 19:                       if(Instruction_type==0) {
+						Tos=Tos+1;
+						if(Memory.ready_queue.get(0).SMT.size()==1) {
+							Memory.segmentFaultHandler(Memory.ready_queue.get(0),1);
+
+						}
+
+						S[Tos]=Memory.Memory("Read", 8*(Integer)Memory.ready_queue.get(0).PMT_InputSegment.get(0).get(0), instruction);//SysteM.user_input();//
+						Memory.ready_queue.get(0).PMT_InputSegment.get(1).set(0, 1);
+					}
+					break;
+
+					case 20:                       if(Instruction_type==0) {
+						if(Memory.ready_queue.get(0).SMT.size()<3) {
+							Memory.segmentFaultHandler(Memory.ready_queue.get(0),2);
+						}
+
+
+						int addr=8*(Integer)Memory.ready_queue.get(0).PMT_OutputSegment.get(0).get(0);
+						Memory.Memory("Write", addr+outputOffset, S[Tos]);
+						outputOffset++;
+						Memory.ready_queue.get(0).PMT_OutputSegment.get(1).set(0, 1);
+						Memory.ready_queue.get(0).PMT_OutputSegment.get(2).set(0, 1);
+						Tos=Tos-1;
+					}
+					break;
+
+					case 21:                       if(Instruction_type==0) {
+						PC=S[Tos];
+						Tos=Tos-1;
+					}
+					break;
+
+					case 22:                       if(Instruction_type==1) {
+						Tos=Tos+1;
+						if(-1==(Integer)Memory.ready_queue.get(0).PMT_ProgSegment.get(0).get(binary_dec(EA)/8)){
+							Memory.pageFaultHandler((Pcb) Memory.ready_queue.get(0),binary_dec(EA)/8);
+						}else {
+
+						}
+						int yea=8*(Integer)Memory.ready_queue.get(0).PMT_ProgSegment.get(0).get(binary_dec(EA)/8)+binary_dec(EA)%8;
+						S[Tos]=Memory.memory[yea];
+
+
+					}
+					break;
+
+					case 23:                       if(Instruction_type==1) {
+						if(-1==(Integer)Memory.ready_queue.get(0).PMT_ProgSegment.get(0).get(binary_dec(EA)/8)){
+							Memory.pageFaultHandler((Pcb) Memory.ready_queue.get(0),binary_dec(EA)/8);
+
+						}else {
+
+						}
+
+						int yea=8*(Integer)Memory.ready_queue.get(0).PMT_ProgSegment.get(0).get(binary_dec(EA)/8)+binary_dec(EA)%8;
+						Memory.memory[yea]=S[Tos];
+
+						Tos=Tos-1;
+						//(clock);
+						// System.out.println("here");
+					}
+
+					case 24:                       if(Instruction_type==0) {
+						length1=-1;
+						loop=false;
+						for(int s=0;s<Memory.ready_queue.get(0).PMT_InputSegment.get(0).size();s++) {
+							if((Integer)Memory.ready_queue.get(0).PMT_InputSegment.get(2).get(s)==1) {
+								Loader.write_to_disk(Memory.ready_queue.get(0), 1, s);
+
+							}
+						}
+						for(int s=0;s<Memory.ready_queue.get(0).PMT_OutputSegment.get(0).size();s++) {
+							if((Integer)Memory.ready_queue.get(0).PMT_OutputSegment.get(2).get(s)==1) {
+								Loader.write_to_disk(Memory.ready_queue.get(0), 2, s);
+
+							}
+						}
+
+						SysteM.outputSpool(Memory.ready_queue.get(0));
+
+					}
+					break;
+					}
+					i++;
+					Op[i-1]="";
+					if(y==1) {
+						try {
+							PrintWriter out1 = new PrintWriter(new BufferedWriter(new FileWriter("./trace_"+SysteM.file,true)));
+							out1.printf("%17s",decimal_hex(Tos));
+							out1.printf("%14s",binary_hex(S[Tos]));
+							if(EA.equals("N/A")) {
+								out1.printf("%12s","NA");
+								out1.printf("%14s","NA");
+
+							}else {
+								out1.printf("%12s",binary_hex(EA));
+								if((Integer)Memory.ready_queue.get(0).PMT_ProgSegment.get(0).get(binary_dec(EA)/8)==-1||(Memory.memory[(8*(Integer)Memory.ready_queue.get(0).PMT_ProgSegment.get(0).get(binary_dec(EA)/8))+(binary_dec(EA)%8)+1])==null) {
+
+									out1.printf("%14s","NA");
+								}else {
+									out1.printf("%14s",binary_hex(Memory.memory[(8*(Integer)Memory.ready_queue.get(0).PMT_ProgSegment.get(0).get(binary_dec(EA)/8))+(binary_dec(EA)%8)+1]));
+								}
+							}
+
+							out1.println();
+							out1.close();
+						}
+						catch(IOException e) {
+						}
+
+					}
+
+					int clock1=clock;
+
+					if(clock1-clock2>=15) {
+						clock2=clock1;
+
+						try{
+							PrintWriter out= new PrintWriter(new BufferedWriter(new FileWriter(SysteM.file,true)));
+							out.println("Page map tables at clock :"+clock);
+							for(int c=0;c<Memory.ready_queue.get(0).SMT.size();c++) {
+								if(c==0) {
+									out.println("Program Segment");
+									out.println("Disk Frame   Memory Frame");
+									for(int t1=0;t1<Memory.ready_queue.get(0).PMT_ProgSegment.get(0).size();t1++) {
+										out.println("   "+Memory.ready_queue.get(0).diskPageFrames_ProgSegment.get(t1)+"\t\t"+Memory.ready_queue.get(0).PMT_ProgSegment.get(0).get(t1));
+									}
+									out.println();
+								}else if(c==1) {
+									out.println("Input Segment");
+									out.println("Disk Frame   Memory Frame");
+									for(int t1=0;t1<Memory.ready_queue.get(0).PMT_InputSegment.get(0).size();t1++) {
+										out.println("   "+Memory.ready_queue.get(0).diskPageFrames_InputSegment.get(t1)+"\t\t"+Memory.ready_queue.get(0).PMT_InputSegment.get(0).get(t1));
+									}
+									out.println();
+								}else if(c==2) {
+									out.println("Output Segment");
+									out.println("Disk Frame   Memory Frame");
+									for(int t1=0;t1<Memory.ready_queue.get(0).PMT_OutputSegment.get(0).size();t1++) {
+										out.println("   "+Memory.ready_queue.get(0).diskPageFrames_OutputSegment.get(t1)+"\t\t"+Memory.ready_queue.get(0).PMT_OutputSegment.get(0).get(t1));
+									}
+									out.println();
+								}
+
+							}
+
+
+
+							out.close();
+
+						}
+						catch(IOException e){
+						}
+
+					}
+				}
+
+
+
+			}
+
+			int nextInstruction_page= binary_dec(PC)/8;
+			if(-1==(Integer)Memory.ready_queue.get(0).PMT_ProgSegment.get(0).get(binary_dec(PC)/8)){
+				Memory.pageFaultHandler((Pcb) Memory.ready_queue.get(0),nextInstruction_page);
+			}
+
+		}
+	}
+	public String bool_binary(boolean to_be_converted) {
+		if(to_be_converted) {
+			return new BigInteger(Integer.toString(1, 10)).toString(2);
+		}
+		else {
+			return new BigInteger(Integer.toString(0, 10)).toString(2);
+		}
+	}
+	public String increment(String to_be_converted) { // converting a hex word number to binary
+		int decimal=Integer.parseInt(new BigInteger(to_be_converted, 2).toString(10));
+		String ret=new BigInteger(Integer.toString(decimal+1, 10)).toString(2);
+		while(ret.length()<7)
+			ret="0"+ret;
+		return ret;
+	}
+	static int binary_dec(String to_be_converted) {
+		int decimal=Integer.parseInt(to_be_converted, 2);
+		return decimal;
+	}
+
+	static String dec_binary(int to_be_converted) { // converting a hex word number to binary
+		String binary=null;
+		binary=new BigInteger(Integer.toString(to_be_converted), 10).toString(2); // converting the number from base 16 to base 2
+
+		return binary;
+	}	
+
+	static int getOperand() {
+		int i=0;
+		if(Instruction_type==0) {
+			i=binary_dec(S[Tos-1]);
+		}
+		else if(Instruction_type==1) {	
+			int ea=binary_dec(EA);
+			int yea;
+			if(-1==(Integer)Memory.ready_queue.get(0).PMT_ProgSegment.get(0).get(ea/8)){
+
+				Memory.pageFaultHandler((Pcb) Memory.ready_queue.get(0),ea/8);
+				yea=(8*(Integer)Memory.ready_queue.get(0).PMT_ProgSegment.get(0).get(ea/8))+(ea%8);			
+			}
+			else {
+				yea=(8*(Integer)Memory.ready_queue.get(0).PMT_ProgSegment.get(0).get(ea/8))+(ea%8);
+			}
+
+			i=binary_dec(Memory.Memory("Read",yea,Z));
+		}
+		return i;
+	}
+
+
+	static String binary_hex(String to_be_converted) { // converting a hex word number to binary
+		String hex="";
+		hex=new BigInteger(to_be_converted, 2).toString(16); // converting the number from base 16 to base 2
+		while(hex.length()<4)
+			hex="0"+hex;
+		return hex;
+	}
+	static String decimal_hex(int to_be_converted) { // converting a hex word number to binary
+		String hex=null;
+		hex=new BigInteger(Integer.toString(to_be_converted), 10).toString(16); // converting the number from base 16 to base 2
+		return hex;
+	}
+	static int read_from_stack(String to_be_converted) {
+		String s=to_be_converted;
+		while (s.length()<16) {
+			s="0"+s;
+		}
+		char c=s.charAt(0);
+		String num=new BigInteger(to_be_converted, 2).toString(10);
+		int val=0;
+		if(c=='1') {
+			val=-1*Integer.parseInt(num.substring(1));
+		}
+		else {
+			val=Integer.parseInt(s);
+		}
+		return val;
+	}
+}
